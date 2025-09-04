@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Virtual envs
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# Data and artifacts
+encodings/
+outputs/
+data/
+*.db
+*.sqlite
+
+# Editor/IDE
+.idea/
+.vscode/
+
+
