@@ -427,3 +427,83 @@ For issues and questions:
 ---
 
 **Note**: This system is designed for educational and development purposes. For production use, consider additional security measures, privacy compliance, and performance optimizations.
+
+## Attendance Register (New)
+
+This project now includes a class Attendance Register built on top of the face recognition system.
+
+- Students and attendance are stored in the database (SQLite by default; PostgreSQL supported)
+- Real-time attendance marking: recognized students are marked Present once per day
+- Absent list: a daily finalize step marks all not-seen students as Absent
+- Web dashboard to view/download attendance
+
+### Quick Start (Attendance)
+
+1) Start the web UI and upload students:
+```bash
+python3 uploader.py
+# Open http://127.0.0.1:5000/upload
+# Enter Name, optional Student ID, check "Save as Student", choose face photo, submit
+```
+
+2) Run attendance-mode recognition (marks Present in real time):
+```bash
+python3 recognize.py --db-url "sqlite:///data/faces.db" --attendance-mode --refresh-interval 5
+```
+
+3) View attendance (filter and export):
+```text
+http://127.0.0.1:5000/attendance
+```
+Click "Download CSV" to export for a date range.
+
+4) Finalize Absent list (end of day):
+```bash
+python3 finalize_attendance.py --db-url "sqlite:///data/faces.db" --date YYYY-MM-DD
+```
+
+Optional scheduled finalize via Celery Beat (daily):
+```bash
+# Requirements: Redis running (redis-server)
+celery -A celery_app.celery worker --loglevel=INFO
+celery -A celery_app.celery beat --loglevel=INFO
+# Configure run time with env vars FINALIZE_HOUR and FINALIZE_MINUTE
+```
+
+### Convert existing Faces to Students
+
+If you previously uploaded faces (Faces table) and want to use attendance-mode immediately:
+```bash
+python3 migrate_faces_to_students.py --db-url "sqlite:///data/faces.db"
+```
+
+### Web Uploader (Student mode)
+
+On the Upload page, you can save directly as Students by:
+- Checking "Save as Student" and optionally providing a Student ID (auto-generated if omitted)
+
+### Multi-camera Recognition
+
+Run with multiple webcams:
+```bash
+python3 multi_recognize.py --cameras 0 1 --db-url "sqlite:///data/faces.db" --refresh-interval 5 --tolerance 0.6 --model hog
+```
+
+### REST API (selected)
+
+- Health: `GET /api/health`
+- Metrics: `GET /api/metrics`
+- Recognize: `POST /api/recognize` (multipart `file` or JSON `{image_b64}`; optional `tolerance`)
+- Faces: `GET /api/faces`, `GET /api/faces/<id>`, `POST /api/faces`, `DELETE /api/faces/<id>`
+- Attendance: `GET /api/attendance?start=YYYY-MM-DD&end=YYYY-MM-DD`, `GET /api/attendance.csv?...`
+- Jobs (async, requires Celery/Redis): `POST /api/jobs/batch_encode`, `POST /api/jobs/recognize`, `GET /api/jobs/<task_id>`, `POST /api/jobs/finalize_absentees`
+
+### Cloud Storage (optional)
+
+If you set `S3_BUCKET`, uploaded images are saved to S3 and the DB stores the `s3://bucket/key` path. Presigned URLs can be fetched via `GET /api/faces/<id>/presigned`.
+
+### Configuration Summary
+
+- Database URL: `--db-url` flags or `DB_URL` env for web app
+- Attendance finalize schedule: `FINALIZE_HOUR`, `FINALIZE_MINUTE`
+- S3: `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
