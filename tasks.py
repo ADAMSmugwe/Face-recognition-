@@ -7,6 +7,7 @@ import face_recognition
 
 from celery_app import celery
 from database import get_engine, init_db, get_session_maker, FaceRepository
+from database import StudentRepository, AttendancePresentRepository, AttendanceAbsentRepository
 
 
 def _get_repo(db_url: str) -> FaceRepository:
@@ -84,5 +85,26 @@ def recognize_image_bytes(image_b64: str, db_url: str, tolerance: float = 0.6) -
         else:
             results.append({"name": "Unknown", "confidence": 0.0, "box": [top, right, bottom, left]})
     return {"results": results}
+
+
+@celery.task(name="finalize_absentees_task")
+def finalize_absentees_task(db_url: str = "sqlite:///data/faces.db", day: str = None) -> dict:
+    from datetime import date as date_cls
+    engine = get_engine(db_url)
+    init_db(engine)
+    Session = get_session_maker(engine)
+    student_repo = StudentRepository(Session)
+    present_repo = AttendancePresentRepository(Session)
+    absent_repo = AttendanceAbsentRepository(Session)
+    _, meta = student_repo.get_all_encodings()  # (id, student_id, name)
+    d = day or str(date_cls.today())
+    total = 0
+    marked_absent = 0
+    for sid, code, name in meta:
+        total += 1
+        if not present_repo.has_marked_today(sid, d):
+            absent_repo.mark_absent(sid, d)
+            marked_absent += 1
+    return {"date": d, "total": total, "absent": marked_absent}
 
 

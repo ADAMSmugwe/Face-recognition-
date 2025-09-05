@@ -1,5 +1,6 @@
 import os
 from celery import Celery
+from celery.schedules import crontab
 
 
 def make_celery() -> Celery:
@@ -10,6 +11,15 @@ def make_celery() -> Celery:
     app.conf.result_serializer = "json"
     app.conf.accept_content = ["json"]
     app.conf.result_expires = 3600
+    # Optional: Celery beat schedule for daily absentee finalization (defaults 17:00)
+    hour = int(os.environ.get("FINALIZE_HOUR", "17"))
+    minute = int(os.environ.get("FINALIZE_MINUTE", "0"))
+    app.conf.beat_schedule = {
+        "finalize-absentees-daily": {
+            "task": "finalize_absentees_task",
+            "schedule": crontab(hour=hour, minute=minute),
+        }
+    }
     return app
 
 

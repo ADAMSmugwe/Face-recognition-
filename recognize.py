@@ -11,7 +11,15 @@ import sys
 import time
 import argparse
 from db import FaceDatabase
-from database import get_engine, init_db, get_session_maker, FaceRepository, StudentRepository, AttendanceRepository
+from database import (
+    get_engine,
+    init_db,
+    get_session_maker,
+    FaceRepository,
+    StudentRepository,
+    AttendanceRepository,
+    AttendancePresentRepository,
+)
 from utils import load_encodings, draw_face_box, load_config, save_encodings
 
 
@@ -88,6 +96,7 @@ def main():
     if args.attendance_mode:
         student_repo = StudentRepository(Session)
         attendance_repo = AttendanceRepository(Session)
+        attendance_present_repo = AttendancePresentRepository(Session)
         student_encs, student_meta = student_repo.get_all_encodings()
         # names array will be student names, and we track mapping by index
         known_encodings = student_encs
@@ -211,9 +220,8 @@ def main():
                                 student_db_id = sid
                                 break
                         if student_db_id is not None:
-                            attendance_repo = AttendanceRepository(Session)
-                            if not attendance_repo.has_marked_today(student_db_id, date_cls.today()):
-                                attendance_repo.mark_present(student_db_id, date_cls.today())
+                            if not attendance_present_repo.has_marked_today(student_db_id, date_cls.today()):
+                                attendance_present_repo.mark_present(student_db_id, date_cls.today())
                                 cv2.putText(frame, "Marked Present", (left, min(bottom + 30, frame.shape[0]-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     except Exception:
                         pass

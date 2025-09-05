@@ -19,6 +19,7 @@ from sqlalchemy import (
     Date,
     create_engine,
     func,
+    text,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
@@ -61,6 +62,23 @@ class Attendance(Base):
     date = Column(Date, nullable=False)
     time = Column(DateTime, server_default=func.now(), nullable=False)
     status = Column(String, nullable=False, default="Present")
+
+
+class AttendancePresent(Base):
+    __tablename__ = "attendance_present"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
+    time = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AttendanceAbsent(Base):
+    __tablename__ = "attendance_absent"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
 
 
 def get_engine(db_url: str):
@@ -199,15 +217,94 @@ class AttendanceRepository:
         with self._session_maker() as session:
             # Join via manual fetch to avoid ORM complexity
             rows = session.execute(
-                """
-                SELECT s.student_id, s.name, a.date, a.status
-                FROM attendance a
-                JOIN students s ON s.id = a.student_id
-                WHERE a.date BETWEEN :start AND :end
-                ORDER BY a.date DESC
-                """,
+                text(
+                    """
+                    SELECT s.student_id, s.name, a.date, a.status
+                    FROM attendance a
+                    JOIN students s ON s.id = a.student_id
+                    WHERE a.date BETWEEN :start AND :end
+                    ORDER BY a.date DESC
+                    """
+                ),
                 {"start": start_date, "end": end_date},
             ).fetchall()
             return [(r[0], r[1], str(r[2]), r[3]) for r in rows]
+
+
+class AttendancePresentRepository:
+    def __init__(self, session_maker: sessionmaker):
+        self._session_maker = session_maker
+
+    def has_marked_today(self, student_db_id: int, on_date) -> bool:
+        with self._session_maker() as session:
+            existing = session.execute(
+                text(
+                    "SELECT 1 FROM attendance_present WHERE student_id=:sid AND date=:d LIMIT 1"
+                ),
+                {"sid": student_db_id, "d": on_date},
+            ).fetchone()
+            return existing is not None
+
+    def mark_present(self, student_db_id: int, on_date) -> int:
+        from datetime import date as date_cls
+        if not hasattr(on_date, "year"):
+            on_date = date_cls.today()
+        with self._session_maker() as session:
+            session.execute(
+                text(
+                    "INSERT INTO attendance_present (student_id, date) SELECT :sid, :d WHERE NOT EXISTS (SELECT 1 FROM attendance_present WHERE student_id=:sid AND date=:d)"
+                ),
+                {"sid": student_db_id, "d": on_date},
+            )
+            session.commit()
+            rowid = session.execute(text("SELECT last_insert_rowid()")).scalar() if session.bind.dialect.name == "sqlite" else 0
+            return int(rowid or 0)
+
+    def export_range(self, start_date, end_date) -> List[Tuple[str, str, str]]:
+        with self._session_maker() as session:
+            rows = session.execute(
+                text(
+                    """
+                    SELECT s.student_id, s.name, p.date
+                    FROM attendance_present p
+                    JOIN students s ON s.id = p.student_id
+                    WHERE p.date BETWEEN :start AND :end
+                    ORDER BY p.date DESC
+                    """
+                ),
+                {"start": start_date, "end": end_date},
+            ).fetchall()
+            return [(r[0], r[1], str(r[2])) for r in rows]
+
+
+class AttendanceAbsentRepository:
+    def __init__(self, session_maker: sessionmaker):
+        self._session_maker = session_maker
+
+    def mark_absent(self, student_db_id: int, on_date) -> None:
+        with self._session_maker() as session:
+            session.execute(
+                text(
+                    "INSERT INTO attendance_absent (student_id, date) SELECT :sid, :d WHERE NOT EXISTS (SELECT 1 FROM attendance_absent WHERE student_id=:sid AND date=:d)"
+                ),
+                {"sid": student_db_id, "d": on_date},
+            )
+            session.commit()
+
+    def export_range(self, start_date, end_date) -> List[Tuple[str, str, str]]:
+        with self._session_maker() as session:
+            rows = session.execute(
+                text(
+                    """
+                    SELECT s.student_id, s.name, a.date
+                    FROM attendance_absent a
+                    JOIN students s ON s.id = a.student_id
+                    WHERE a.date BETWEEN :start AND :end
+                    ORDER BY a.date DESC
+                    """
+                ),
+                {"start": start_date, "end": end_date},
+            ).fetchall()
+            return [(r[0], r[1], str(r[2])) for r in rows]
 
 

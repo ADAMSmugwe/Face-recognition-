@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Attendance</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+      table { border-collapse: collapse; margin-top: 1rem; width: 100%; }
+      th, td { border: 1px solid #ddd; padding: 8px; }
+      th { background: #f4f6f8; text-align: left; }
+      .controls { display: flex; gap: 0.5rem; align-items: center; }
+      input { padding: 0.4rem; border: 1px solid #ccc; border-radius: 6px; }
+      a.button { padding: 0.5rem 1rem; background: #2d6cdf; color: #fff; text-decoration: none; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Attendance Records</h1>
+    <form class="controls" method="get" action="/attendance">
+      <label>Start <input type="date" name="start" value="{{ start }}" /></label>
+      <label>End <input type="date" name="end" value="{{ end }}" /></label>
+      <button type="submit">Filter</button>
+      <a class="button" href="/api/attendance.csv?start={{ start }}&end={{ end }}">Download CSV</a>
+      <a class="button" href="/" style="background:#777;">Home</a>
+    </form>
+
+    {% if rows and rows|length > 0 %}
+    <table>
+      <thead>
+        <tr>
+          <th>Student ID</th>
+          <th>Name</th>
+          <th>Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r[0] }}</td>
+          <td>{{ r[1] }}</td>
+          <td>{{ r[2] }}</td>
+          <td>{{ r[3] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>No attendance records for the selected range.</p>
+    {% endif %}
+
+    {% if present and present|length > 0 %}
+    <h2>Present</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Student ID</th>
+          <th>Name</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in present %}
+        <tr>
+          <td>{{ r[0] }}</td>
+          <td>{{ r[1] }}</td>
+          <td>{{ r[2] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if absent and absent|length > 0 %}
+    <h2>Absent</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Student ID</th>
+          <th>Name</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in absent %}
+        <tr>
+          <td>{{ r[0] }}</td>
+          <td>{{ r[1] }}</td>
+          <td>{{ r[2] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </body>
+  </html>
+
+

@@ -20,8 +20,14 @@ from werkzeug.utils import secure_filename
 
 import face_recognition
 
-from database import get_engine, init_db, get_session_maker, FaceRepository
-from tasks import batch_encode_folder, recognize_image_bytes
+from database import (
+    get_engine, init_db, get_session_maker,
+    FaceRepository, AttendanceRepository,
+    AttendancePresentRepository, AttendanceAbsentRepository,
+    StudentRepository,
+)
+from datetime import date as date_cls
+from tasks import batch_encode_folder, recognize_image_bytes, finalize_absentees_task
 from cloud_storage import S3Client
 from monitoring import metrics
 
@@ -45,6 +51,7 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
     init_db(engine)
     Session = get_session_maker(engine)
     repo = FaceRepository(Session)
+    student_repo = StudentRepository(Session)
 
     @app.route("/")
     def index():
@@ -58,6 +65,8 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
         if request.method == "POST":
             with metrics.timer("upload.process_time"):
                 name: Optional[str] = request.form.get("name") or None
+                student_id: Optional[str] = request.form.get("student_id") or None
+                as_student = request.form.get("as_student") in ("on", "true", "1")
                 file = request.files.get("file")
                 if not file or file.filename == "":
                     flash("No file selected", "error")
@@ -90,8 +99,13 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
                         pass
 
                     # Save first face encoding (include stored path)
-                    repo.add_face(name, np.asarray(encs[0]), image_path=image_path, image_bytes=image_bytes)
-                    flash("Face saved successfully", "success")
+                    if as_student or student_id:
+                        sid = student_id or (name or "student").lower().replace(" ", "_")
+                        student_repo.add_student(sid, name or sid, np.asarray(encs[0]), image_path=image_path, image_bytes=image_bytes)
+                        flash("Student saved successfully", "success")
+                    else:
+                        repo.add_face(name, np.asarray(encs[0]), image_path=image_path, image_bytes=image_bytes)
+                        flash("Face saved successfully", "success")
                     return redirect(url_for("index"))
                 except Exception as e:
                     flash(f"Error processing image: {e}", "error")
@@ -321,6 +335,13 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
                 payload["error"] = str(e)
         return jsonify(payload)
 
+    @app.post("/api/jobs/finalize_absentees")
+    def api_jobs_finalize_absentees():
+        data = request.get_json(silent=True) or {}
+        day = data.get("date")
+        job = finalize_absentees_task.delay(app.config["DB_URL"], day)
+        return jsonify({"task_id": job.id}), 202
+
     @app.delete("/api/faces/<int:face_id>")
     def api_delete_face(face_id: int):
         metrics.inc("api.faces.delete")
@@ -351,6 +372,53 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
                         return jsonify({"url": url})
                 return jsonify({"error": "no_s3_path"}), 400
         return jsonify({"error": "not_found"}), 404
+
+    # -------- Attendance Web & API -------- #
+    @app.route("/attendance", methods=["GET"]) 
+    def attendance_page():
+        start = request.args.get("start") or str(date_cls.today())
+        end = request.args.get("end") or str(date_cls.today())
+        repo_att = AttendanceRepository(Session)
+        rows = repo_att.export_range(start, end)  # (student_id, name, date, status)
+        repo_present = AttendancePresentRepository(Session)
+        repo_absent = AttendanceAbsentRepository(Session)
+        present = repo_present.export_range(start, end)
+        absent = repo_absent.export_range(start, end)
+        return render_template("attendance.html", rows=rows, present=present, absent=absent, start=start, end=end)
+
+    @app.get("/api/attendance")
+    def api_attendance():
+        start = request.args.get("start") or str(date_cls.today())
+        end = request.args.get("end") or str(date_cls.today())
+        repo_att = AttendanceRepository(Session)
+        rows = repo_att.export_range(start, end)
+        payload = [
+            {"student_id": r[0], "name": r[1], "date": r[2], "status": r[3]}
+            for r in rows
+        ]
+        return jsonify({"start": start, "end": end, "attendance": payload})
+
+    @app.get("/api/attendance.csv")
+    def api_attendance_csv():
+        import csv
+        from io import StringIO
+        start = request.args.get("start") or str(date_cls.today())
+        end = request.args.get("end") or str(date_cls.today())
+        repo_att = AttendanceRepository(Session)
+        rows = repo_att.export_range(start, end)
+        buf = StringIO()
+        w = csv.writer(buf)
+        w.writerow(["student_id", "name", "date", "status"])
+        for r in rows:
+            w.writerow(list(r))
+        from flask import Response
+        return Response(
+            buf.getvalue(),
+            mimetype="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=attendance_{start}_to_{end}.csv"
+            },
+        )
 
     @app.get("/api/metrics")
     def api_metrics():
