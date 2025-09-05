@@ -244,3 +244,64 @@ def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
     except Exception as e:
         print(f"Warning: Failed to load config '{config_path}': {str(e)}")
         return {}
+
+
+# -------- Mask-aware helpers -------- #
+
+def mask_lower_face(chip: np.ndarray, mask_ratio: float = 0.45) -> np.ndarray:
+    """Return a copy of chip with the lower mask_ratio area filled to simulate a mask.
+
+    mask_ratio is fraction from bottom (e.g., 0.45 means bottom 45% covered).
+    """
+    if chip is None or chip.size == 0:
+        return chip
+    h = int(chip.shape[0])
+    cover = int(max(0, min(h, round(h * float(mask_ratio)))))
+    if cover <= 0:
+        return chip.copy()
+    out = chip.copy()
+    out[h - cover : h, :, :] = 128  # neutral gray
+    return out
+
+
+def get_mask_aware_encodings_with_locations(
+    image: np.ndarray,
+    face_locations: List[Tuple[int, int, int, int]],
+    align: bool = True,
+    align_size: int = 160,
+    mask_ratio: float = 0.45,
+) -> List[Tuple[Optional[np.ndarray], Optional[np.ndarray]]]:
+    """For each location, compute (normal_encoding, masked_encoding).
+
+    - If alignment fails, fall back to original region.
+    - Masked encoding is computed on a chip with lower portion covered.
+    """
+    results: List[Tuple[Optional[np.ndarray], Optional[np.ndarray]]] = []
+    if not face_locations:
+        return results
+    for loc in face_locations:
+        try:
+            chip = align_face_chip(image, loc, output_size=align_size) if align else None
+            normal_enc: Optional[np.ndarray] = None
+            masked_enc: Optional[np.ndarray] = None
+            if chip is None:
+                # fallback: use original frame region
+                encs = face_recognition.face_encodings(image, [loc])
+                normal_enc = encs[0] if encs else None
+                # Build a rough chip crop and mask it if feasible
+                top, right, bottom, left = loc
+                crop = image[top:bottom, left:right]
+                if crop.size != 0:
+                    mr = mask_lower_face(cv2.resize(crop, (align_size, align_size)), mask_ratio=mask_ratio)
+                    encm = face_recognition.face_encodings(mr)
+                    masked_enc = encm[0] if encm else None
+            else:
+                encs = face_recognition.face_encodings(chip)
+                normal_enc = encs[0] if encs else None
+                mr = mask_lower_face(chip, mask_ratio=mask_ratio)
+                encm = face_recognition.face_encodings(mr)
+                masked_enc = encm[0] if encm else None
+            results.append((normal_enc, masked_enc))
+        except Exception:
+            results.append((None, None))
+    return results

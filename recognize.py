@@ -19,8 +19,16 @@ from database import (
     StudentRepository,
     AttendanceRepository,
     AttendancePresentRepository,
+    StudentSampleRepository,
 )
-from utils import load_encodings, draw_face_box, load_config, save_encodings, get_face_encodings_with_locations
+from utils import (
+    load_encodings,
+    draw_face_box,
+    load_config,
+    save_encodings,
+    get_face_encodings_with_locations,
+    get_mask_aware_encodings_with_locations,
+)
 
 
 def parse_args(config) -> argparse.Namespace:
@@ -70,6 +78,17 @@ def parse_args(config) -> argparse.Namespace:
         type=int,
         default=int((recog_cfg.get("align_size") if isinstance(recog_cfg, dict) else 160) or 160),
         help="Aligned face chip size (pixels)",
+    )
+    parser.add_argument(
+        "--mask-aware",
+        action="store_true",
+        help="Use mask-aware matching (tries masked encodings for occluded faces)",
+    )
+    parser.add_argument(
+        "--mask-ratio",
+        type=float,
+        default=float((recog_cfg.get("mask_ratio") if isinstance(recog_cfg, dict) else 0.45) or 0.45),
+        help="Lower-face coverage ratio for simulated masks (0.35–0.5 typical)",
     )
     # DB is now the default storage
     parser.add_argument(
@@ -190,31 +209,62 @@ def main():
                 
                 # Find faces
                 face_locations = face_recognition.face_locations(rgb_small_frame, model=args.model)
-                face_encodings = get_face_encodings_with_locations(
-                    rgb_small_frame, face_locations, align=args.align, align_size=args.align_size
-                )
                 
                 face_names = []
-                for face_encoding in face_encodings:
-                    # Compare with known faces if available
-                    if len(known_encodings) == 0:
+                if getattr(args, "mask_aware", False):
+                    enc_pairs = get_mask_aware_encodings_with_locations(
+                        rgb_small_frame,
+                        face_locations,
+                        align=True if args.align else False,
+                        align_size=args.align_size,
+                        mask_ratio=getattr(args, "mask_ratio", 0.45),
+                    )
+                    for normal_enc, masked_enc in enc_pairs:
+                        candidate_encs = [e for e in (normal_enc, masked_enc) if e is not None]
+                        if not candidate_encs:
+                            face_names.append(("Unknown", 0.0))
+                            continue
                         name = "Unknown"
                         confidence = 0.0
-                    else:
-                        face_distances = face_recognition.face_distance(known_encodings, face_encoding)
-                        if face_distances.size == 0:
+                        if len(known_encodings) > 0:
+                            best_name = "Unknown"
+                            best_conf = 0.0
+                            for enc in candidate_encs:
+                                dists = face_recognition.face_distance(known_encodings, enc)
+                                if dists.size == 0:
+                                    continue
+                                idx = int(np.argmin(dists))
+                                if dists[idx] <= args.tolerance:
+                                    conf = 1.0 - float(dists[idx])
+                                    if conf > best_conf:
+                                        best_conf = conf
+                                        best_name = known_names[idx]
+                            name, confidence = best_name, best_conf
+                        face_names.append((name, confidence))
+                else:
+                    face_encodings = get_face_encodings_with_locations(
+                        rgb_small_frame, face_locations, align=args.align, align_size=args.align_size
+                    )
+                    for face_encoding in face_encodings:
+                        # Compare with known faces if available
+                        if len(known_encodings) == 0:
                             name = "Unknown"
                             confidence = 0.0
                         else:
-                            best_match_index = np.argmin(face_distances)
-                            if face_distances[best_match_index] <= args.tolerance:
-                                name = known_names[best_match_index]
-                                confidence = 1 - face_distances[best_match_index]
-                            else:
+                            face_distances = face_recognition.face_distance(known_encodings, face_encoding)
+                            if face_distances.size == 0:
                                 name = "Unknown"
                                 confidence = 0.0
-                    
-                    face_names.append((name, confidence))
+                            else:
+                                best_match_index = np.argmin(face_distances)
+                                if face_distances[best_match_index] <= args.tolerance:
+                                    name = known_names[best_match_index]
+                                    confidence = 1 - face_distances[best_match_index]
+                                else:
+                                    name = "Unknown"
+                                    confidence = 0.0
+                        
+                        face_names.append((name, confidence))
                 
                 # Scale back up face locations
                 scaled_face_locations = []
@@ -244,6 +294,15 @@ def main():
                             if not attendance_present_repo.has_marked_today(student_db_id, date_cls.today()):
                                 attendance_present_repo.mark_present(student_db_id, date_cls.today())
                                 cv2.putText(frame, "Marked Present", (left, min(bottom + 30, frame.shape[0]-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                            # Store high-confidence sample for continuous learning
+                            try:
+                                if confidence and confidence >= 0.65:
+                                    sample_repo = StudentSampleRepository(Session)
+                                    # Use the encoding that matched (first encoding corresponds to current face)
+                                    # We approximate by taking the closest encoding among current frame's encodings
+                                    sample_repo.add_sample(student_db_id, face_encoding, confidence=float(confidence), source="recognize")
+                            except Exception:
+                                pass
                     except Exception:
                         pass
             

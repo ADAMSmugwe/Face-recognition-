@@ -187,6 +187,28 @@ class StudentRepository:
                 meta.append((int(r.id), r.student_id, r.name))
             return encodings, meta
 
+    def get_encoding_by_db_id(self, student_db_id: int) -> Optional[np.ndarray]:
+        with self._session_maker() as session:
+            r = session.query(Student).filter(Student.id == student_db_id).first()
+            if not r:
+                return None
+            arr = np.frombuffer(r.encoding, dtype=r.dtype).reshape(-1)
+            if arr.size != r.length:
+                arr = np.frombuffer(r.encoding, dtype=np.float64).reshape(-1)
+            return arr
+
+    def update_student_encoding(self, student_db_id: int, new_encoding: np.ndarray) -> bool:
+        arr = np.asarray(new_encoding)
+        with self._session_maker() as session:
+            session.execute(
+                text(
+                    "UPDATE students SET encoding=:enc, length=:len, dtype=:dtype WHERE id=:id"
+                ),
+                {"enc": arr.tobytes(), "len": int(arr.size), "dtype": str(arr.dtype), "id": int(student_db_id)},
+            )
+            session.commit()
+            return True
+
 
 class AttendanceRepository:
     def __init__(self, session_maker: sessionmaker):
@@ -307,4 +329,66 @@ class AttendanceAbsentRepository:
             ).fetchall()
             return [(r[0], r[1], str(r[2])) for r in rows]
 
+
+# ---- Continuous Learning: Student Samples ---- #
+
+class StudentSample(Base):
+    __tablename__ = "student_samples"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, nullable=False)
+    encoding = Column(LargeBinary, nullable=False)
+    length = Column(Integer, nullable=False)
+    dtype = Column(String, nullable=False)
+    confidence = Column(String, nullable=True)
+    source = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class StudentSampleRepository:
+    def __init__(self, session_maker: sessionmaker):
+        self._session_maker = session_maker
+
+    def add_sample(self, student_db_id: int, encoding: np.ndarray, confidence: float = 0.0, source: Optional[str] = None) -> int:
+        arr = np.asarray(encoding)
+        row = StudentSample(
+            student_id=student_db_id,
+            encoding=arr.tobytes(),
+            length=int(arr.size),
+            dtype=str(arr.dtype),
+            confidence=f"{float(confidence):.4f}",
+            source=source or "recognize",
+        )
+        with self._session_maker() as session:  # type: Session
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return int(row.id)
+
+    def get_samples(self, student_db_id: int, limit: Optional[int] = None) -> List[np.ndarray]:
+        with self._session_maker() as session:  # type: Session
+            q = session.query(StudentSample).filter(StudentSample.student_id == student_db_id).order_by(StudentSample.created_at.desc())
+            if limit and limit > 0:
+                q = q.limit(int(limit))
+            rows = q.all()
+            encs: List[np.ndarray] = []
+            for r in rows:
+                arr = np.frombuffer(r.encoding, dtype=r.dtype).reshape(-1)
+                if arr.size != r.length:
+                    arr = np.frombuffer(r.encoding, dtype=np.float64).reshape(-1)
+                encs.append(arr)
+            return encs
+
+    def delete_oldest(self, student_db_id: int, keep_last: int = 100) -> int:
+        with self._session_maker() as session:
+            # delete older rows beyond keep_last
+            session.execute(
+                text(
+                    "DELETE FROM student_samples WHERE id IN ("
+                    "SELECT id FROM student_samples WHERE student_id=:sid ORDER BY created_at DESC OFFSET :k)"
+                ),
+                {"sid": student_db_id, "k": int(max(keep_last, 0))},
+            )
+            session.commit()
+            return 0
 

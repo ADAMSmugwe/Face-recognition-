@@ -489,6 +489,17 @@ Run with multiple webcams:
 python3 multi_recognize.py --cameras 0 1 --db-url "sqlite:///data/faces.db" --refresh-interval 5 --tolerance 0.6 --model hog
 ```
 
+### Continuous Learning (optional)
+
+The recognizer stores high-confidence samples for known students during attendance. These samples help keep embeddings fresh as faces change (aging, facial hair, hairstyles).
+
+Recompute student encodings from recent samples via Celery task:
+
+```bash
+# Trigger recompute (requires Celery worker)
+python3 -c "from tasks import recompute_student_encodings; print(recompute_student_encodings('sqlite:///data/faces.db', samples_limit=100, min_samples=5))"
+```
+
 ### REST API (selected)
 
 - Health: `GET /api/health`

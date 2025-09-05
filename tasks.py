@@ -13,6 +13,7 @@ except Exception:
 from celery_app import celery
 from database import get_engine, init_db, get_session_maker, FaceRepository
 from database import StudentRepository, AttendancePresentRepository, AttendanceAbsentRepository
+from database import StudentSampleRepository
 
 
 def _get_repo(db_url: str) -> FaceRepository:
@@ -94,6 +95,45 @@ def recognize_image_bytes(image_b64: str, db_url: str, tolerance: float = 0.6) -
         else:
             results.append({"name": "Unknown", "confidence": 0.0, "box": [top, right, bottom, left]})
     return {"results": results}
+
+
+@celery.task(name="recompute_student_encodings")
+def recompute_student_encodings(db_url: str, samples_limit: int = 100, min_samples: int = 5) -> dict:
+    """Recompute each student's encoding as a centroid of their latest samples (and original)."""
+    engine = get_engine(db_url)
+    init_db(engine)
+    Session = get_session_maker(engine)
+    srepo = StudentRepository(Session)
+    samp_repo = StudentSampleRepository(Session)
+
+    students = srepo.get_all_students()
+    updated = 0
+    skipped = 0
+    for s in students:
+        base = srepo.get_encoding_by_db_id(int(s.id))
+        samples = samp_repo.get_samples(int(s.id), limit=int(samples_limit))
+        if not samples:
+            skipped += 1
+            continue
+        stack = [base] if base is not None else []
+        stack.extend(samples)
+        if len(stack) < int(min_samples):
+            skipped += 1
+            continue
+        try:
+            arr = np.vstack(stack)
+            centroid = arr.mean(axis=0)
+            srepo.update_student_encoding(int(s.id), centroid.astype(base.dtype if base is not None else np.float32))
+            # Trim to last N samples
+            try:
+                samp_repo.delete_oldest(int(s.id), keep_last=int(samples_limit))
+            except Exception:
+                pass
+            updated += 1
+        except Exception:
+            skipped += 1
+            continue
+    return {"updated": updated, "skipped": skipped}
 
 
 @celery.task(name="finalize_absentees_task")
