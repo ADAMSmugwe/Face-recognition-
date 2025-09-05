@@ -16,6 +16,7 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     String,
+    Date,
     create_engine,
     func,
 )
@@ -36,6 +37,30 @@ class Face(Base):
     image_path = Column(String, nullable=True)
     image_data = Column(LargeBinary, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Student(Base):
+    __tablename__ = "students"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=False)
+    encoding = Column(LargeBinary, nullable=False)
+    length = Column(Integer, nullable=False)
+    dtype = Column(String, nullable=False)
+    image_path = Column(String, nullable=True)
+    image_data = Column(LargeBinary, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Attendance(Base):
+    __tablename__ = "attendance"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
+    time = Column(DateTime, server_default=func.now(), nullable=False)
+    status = Column(String, nullable=False, default="Present")
 
 
 def get_engine(db_url: str):
@@ -104,5 +129,85 @@ class FaceRepository:
     def list_faces(self) -> List[Face]:
         with self._session_maker() as session:  # type: Session
             return session.query(Face).order_by(Face.created_at.desc()).all()
+
+
+class StudentRepository:
+    def __init__(self, session_maker: sessionmaker):
+        self._session_maker = session_maker
+
+    def add_student(self, student_id: str, name: str, encoding: np.ndarray, image_path: Optional[str] = None, image_bytes: Optional[bytes] = None) -> int:
+        arr = np.asarray(encoding)
+        row = Student(
+            student_id=student_id,
+            name=name,
+            encoding=arr.tobytes(),
+            length=int(arr.size),
+            dtype=str(arr.dtype),
+            image_path=image_path,
+            image_data=image_bytes,
+        )
+        with self._session_maker() as session:  # type: Session
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return int(row.id)
+
+    def get_all_students(self) -> List[Student]:
+        with self._session_maker() as session:
+            return session.query(Student).order_by(Student.created_at.desc()).all()
+
+    def get_all_encodings(self) -> Tuple[List[np.ndarray], List[Tuple[int, str, str]]]:
+        with self._session_maker() as session:
+            rows = session.query(Student).all()
+            encodings: List[np.ndarray] = []
+            meta: List[Tuple[int, str, str]] = []  # (id, student_id, name)
+            for r in rows:
+                arr = np.frombuffer(r.encoding, dtype=r.dtype).reshape(-1)
+                if arr.size != r.length:
+                    arr = np.frombuffer(r.encoding, dtype=np.float64).reshape(-1)
+                encodings.append(arr)
+                meta.append((int(r.id), r.student_id, r.name))
+            return encodings, meta
+
+
+class AttendanceRepository:
+    def __init__(self, session_maker: sessionmaker):
+        self._session_maker = session_maker
+
+    def mark_present(self, student_db_id: int, on_date) -> int:
+        from datetime import date as date_cls
+        if not hasattr(on_date, "year"):
+            on_date = date_cls.today()
+        with self._session_maker() as session:
+            # Prevent duplicate for day
+            existing = session.query(Attendance).filter(Attendance.student_id == student_db_id, Attendance.date == on_date).first()
+            if existing:
+                return int(existing.id)
+            row = Attendance(student_id=student_db_id, date=on_date, status="Present")
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return int(row.id)
+
+    def has_marked_today(self, student_db_id: int, on_date) -> bool:
+        with self._session_maker() as session:
+            existing = session.query(Attendance).filter(Attendance.student_id == student_db_id, Attendance.date == on_date).first()
+            return existing is not None
+
+    def export_range(self, start_date, end_date) -> List[Tuple[str, str, str]]:
+        # returns (student_id, name, date)
+        with self._session_maker() as session:
+            # Join via manual fetch to avoid ORM complexity
+            rows = session.execute(
+                """
+                SELECT s.student_id, s.name, a.date, a.status
+                FROM attendance a
+                JOIN students s ON s.id = a.student_id
+                WHERE a.date BETWEEN :start AND :end
+                ORDER BY a.date DESC
+                """,
+                {"start": start_date, "end": end_date},
+            ).fetchall()
+            return [(r[0], r[1], str(r[2]), r[3]) for r in rows]
 
 

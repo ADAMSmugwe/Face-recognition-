@@ -11,7 +11,7 @@ import sys
 import time
 import argparse
 from db import FaceDatabase
-from database import get_engine, init_db, get_session_maker, FaceRepository
+from database import get_engine, init_db, get_session_maker, FaceRepository, StudentRepository, AttendanceRepository
 from utils import load_encodings, draw_face_box, load_config, save_encodings
 
 
@@ -64,6 +64,11 @@ def parse_args(config) -> argparse.Namespace:
         default=float((recog_cfg.get("refresh_interval") if isinstance(recog_cfg, dict) else 5.0) or 5.0),
         help="Seconds between auto-refresh of encodings (0 to disable)",
     )
+    parser.add_argument(
+        "--attendance-mode",
+        action="store_true",
+        help="Enable class attendance: match against students and mark present",
+    )
     return parser.parse_args()
 
 
@@ -80,9 +85,18 @@ def main():
     engine = get_engine(args.db_url)
     init_db(engine)
     Session = get_session_maker(engine)
-    repo = FaceRepository(Session)
-    known_encodings, known_names = repo.get_all_faces()
-    print(f"Loaded {len(known_encodings)} encodings from DB: {args.db_url}")
+    if args.attendance_mode:
+        student_repo = StudentRepository(Session)
+        attendance_repo = AttendanceRepository(Session)
+        student_encs, student_meta = student_repo.get_all_encodings()
+        # names array will be student names, and we track mapping by index
+        known_encodings = student_encs
+        known_names = [meta[2] for meta in student_meta]
+        print(f"Loaded {len(known_encodings)} student encodings from DB: {args.db_url}")
+    else:
+        repo = FaceRepository(Session)
+        known_encodings, known_names = repo.get_all_faces()
+        print(f"Loaded {len(known_encodings)} encodings from DB: {args.db_url}")
     
     # Initialize camera
     print("Initializing camera...")
@@ -127,10 +141,14 @@ def main():
             # Periodically refresh encodings from source
             if args.refresh_interval and (time.time() - last_refresh_time) >= args.refresh_interval:
                 try:
-                    engine = get_engine(args.db_url)
-                    Session = get_session_maker(engine)
-                    repo = FaceRepository(Session)
-                    known_encodings, known_names = repo.get_all_faces()
+                    if args.attendance_mode:
+                        student_repo = StudentRepository(Session)
+                        student_encs, student_meta = student_repo.get_all_encodings()
+                        known_encodings = student_encs
+                        known_names = [meta[2] for meta in student_meta]
+                    else:
+                        repo = FaceRepository(Session)
+                        known_encodings, known_names = repo.get_all_faces()
                     last_refresh_time = time.time()
                 except Exception:
                     # Ignore refresh errors; continue with existing encodings
@@ -178,6 +196,27 @@ def main():
             # Draw results
             for (top, right, bottom, left), (name, confidence) in zip(scaled_face_locations, face_names):
                 frame = draw_face_box(frame, (top, right, bottom, left), name, confidence)
+                if args.attendance_mode and name != "Unknown":
+                    # Mark present once per student per day
+                    try:
+                        from datetime import date as date_cls
+                        # Find student_db_id by name mapping
+                        # Reload mapping snapshot to keep it simple
+                        student_repo = StudentRepository(Session)
+                        _, student_meta = student_repo.get_all_encodings()
+                        # meta: (id, student_id, name)
+                        student_db_id = None
+                        for sid, student_id_code, student_name in student_meta:
+                            if student_name == name:
+                                student_db_id = sid
+                                break
+                        if student_db_id is not None:
+                            attendance_repo = AttendanceRepository(Session)
+                            if not attendance_repo.has_marked_today(student_db_id, date_cls.today()):
+                                attendance_repo.mark_present(student_db_id, date_cls.today())
+                                cv2.putText(frame, "Marked Present", (left, min(bottom + 30, frame.shape[0]-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    except Exception:
+                        pass
             
             # Calculate and display FPS
             frame_count += 1
