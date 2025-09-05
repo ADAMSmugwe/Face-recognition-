@@ -36,6 +36,17 @@ def parse_args(config) -> argparse.Namespace:
         choices=["hog", "cnn"],
         help="Face detection model (hog=CPU, cnn=GPU)",
     )
+    parser.add_argument(
+        "--align",
+        action="store_true",
+        help="Align faces using landmarks before encoding for better accuracy",
+    )
+    parser.add_argument(
+        "--align-size",
+        type=int,
+        default=int((encoder_cfg.get("align_size") if isinstance(encoder_cfg, dict) else 160) or 160),
+        help="Aligned face chip size (pixels)",
+    )
     # DB is now the default storage
     parser.add_argument(
         "--db-path",
@@ -93,8 +104,8 @@ def main():
         # Get person name
         person_name = get_person_name_from_filename(image_path)
         
-        # Get face encodings
-        face_encodings = get_face_encodings_from_image(image, model=args.model)
+        # Get face encodings (optionally aligned)
+        face_encodings = get_face_encodings_from_image(image, model=args.model, align=args.align, align_size=args.align_size)
         
         if not face_encodings:
             print(f"  Warning: No faces detected in {os.path.basename(image_path)}")

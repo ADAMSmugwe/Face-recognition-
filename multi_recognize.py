@@ -14,21 +14,29 @@ import cv2
 import numpy as np
 import face_recognition
 
-from database import get_engine, init_db, get_session_maker, FaceRepository
+from database import get_engine, init_db, get_session_maker, FaceRepository, StudentRepository
+from utils import get_face_encodings_with_locations
 
 
-def load_known(db_url: str) -> Tuple[List[np.ndarray], List[str]]:
+def load_known(db_url: str, attendance_mode: bool = True) -> Tuple[List[np.ndarray], List[str]]:
     engine = get_engine(db_url)
     init_db(engine)
     Session = get_session_maker(engine)
-    repo = FaceRepository(Session)
-    return repo.get_all_faces()
+    if attendance_mode:
+        srepo = StudentRepository(Session)
+        encs, meta = srepo.get_all_encodings()
+        names = [m[2] for m in meta]
+        return encs, names
+    else:
+        repo = FaceRepository(Session)
+        return repo.get_all_faces()
 
 
 class SharedEncodings:
-    def __init__(self, db_url: str, refresh_interval: float = 5.0):
+    def __init__(self, db_url: str, refresh_interval: float = 5.0, attendance_mode: bool = True):
         self.db_url = db_url
         self.refresh_interval = refresh_interval
+        self.attendance_mode = attendance_mode
         self.known_encodings: List[np.ndarray] = []
         self.known_names: List[str] = []
         self._lock = threading.Lock()
@@ -40,7 +48,7 @@ class SharedEncodings:
         if not force and (now - self._last_refresh) < self.refresh_interval:
             return
         try:
-            enc, names = load_known(self.db_url)
+            enc, names = load_known(self.db_url, attendance_mode=self.attendance_mode)
             with self._lock:
                 self.known_encodings = enc
                 self.known_names = names
@@ -53,7 +61,7 @@ class SharedEncodings:
             return list(self.known_encodings), list(self.known_names)
 
 
-def camera_worker(index: int, shared: SharedEncodings, tolerance: float, model: str):
+def camera_worker(index: int, shared: SharedEncodings, tolerance: float, model: str, align: bool, align_size: int):
     window_name = f"Camera {index}"
     cap = cv2.VideoCapture(index)
     if not cap.isOpened():
@@ -77,7 +85,7 @@ def camera_worker(index: int, shared: SharedEncodings, tolerance: float, model: 
                 small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
                 rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
                 locs = face_recognition.face_locations(rgb, model=model)
-                encs = face_recognition.face_encodings(rgb, locs)
+                encs = get_face_encodings_with_locations(rgb, locs, align=align, align_size=align_size)
 
                 known_encodings, known_names = shared.snapshot()
                 face_names = []
@@ -130,16 +138,21 @@ def parse_args():
     p.add_argument("--tolerance", type=float, default=0.6)
     p.add_argument("--model", default="hog", choices=["hog", "cnn"])
     p.add_argument("--refresh-interval", type=float, default=5.0)
+    p.add_argument("--align", action="store_true", help="Align faces using landmarks before encoding")
+    p.add_argument("--align-size", type=int, default=160, help="Aligned face chip size (pixels)")
+    p.add_argument("--attendance-mode", action="store_true", help="Match against students and mark present")
+    p.set_defaults(attendance_mode=True)
+    p.add_argument("--no-attendance-mode", dest="attendance_mode", action="store_false")
     return p.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    shared = SharedEncodings(args.db_url, refresh_interval=args.refresh_interval)
+    shared = SharedEncodings(args.db_url, refresh_interval=args.refresh_interval, attendance_mode=args.attendance_mode)
 
     threads: List[threading.Thread] = []
     for idx in args.cameras:
-        t = threading.Thread(target=camera_worker, args=(idx, shared, args.tolerance, args.model), daemon=True)
+        t = threading.Thread(target=camera_worker, args=(idx, shared, args.tolerance, args.model, args.align, args.align_size), daemon=True)
         t.start()
         threads.append(t)
 

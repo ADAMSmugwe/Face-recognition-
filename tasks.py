@@ -3,7 +3,12 @@ import os
 from typing import List, Tuple
 
 import numpy as np
-import face_recognition
+try:
+    import face_recognition  # type: ignore
+    _HAS_FACE_RECOG = True
+except Exception:
+    face_recognition = None  # type: ignore
+    _HAS_FACE_RECOG = False
 
 from celery_app import celery
 from database import get_engine, init_db, get_session_maker, FaceRepository
@@ -19,6 +24,8 @@ def _get_repo(db_url: str) -> FaceRepository:
 
 @celery.task(name="batch_encode_folder")
 def batch_encode_folder(input_dir: str, db_url: str) -> dict:
+    if not _HAS_FACE_RECOG:
+        return {"added": 0, "failed": [], "error": "face_recognition_unavailable"}
     added = 0
     failed: List[str] = []
     repo = _get_repo(db_url)
@@ -28,12 +35,12 @@ def batch_encode_folder(input_dir: str, db_url: str) -> dict:
         if not os.path.isfile(path):
             continue
         try:
-            image = face_recognition.load_image_file(path)
-            locs = face_recognition.face_locations(image)
+            image = face_recognition.load_image_file(path)  # type: ignore
+            locs = face_recognition.face_locations(image)  # type: ignore
             if not locs:
                 failed.append(fname)
                 continue
-            encs = face_recognition.face_encodings(image, locs)
+            encs = face_recognition.face_encodings(image, locs)  # type: ignore
             if not encs:
                 failed.append(fname)
                 continue
@@ -48,6 +55,8 @@ def batch_encode_folder(input_dir: str, db_url: str) -> dict:
 
 @celery.task(name="recognize_image_bytes")
 def recognize_image_bytes(image_b64: str, db_url: str, tolerance: float = 0.6) -> dict:
+    if not _HAS_FACE_RECOG:
+        return {"results": [], "error": "face_recognition_unavailable"}
     import base64
 
     try:
@@ -58,9 +67,9 @@ def recognize_image_bytes(image_b64: str, db_url: str, tolerance: float = 0.6) -
         return {"error": f"invalid_base64: {e}"}
 
     repo = _get_repo(db_url)
-    image_np = face_recognition.load_image_file(io.BytesIO(image_bytes))
-    locs = face_recognition.face_locations(image_np)
-    encs = face_recognition.face_encodings(image_np, locs)
+    image_np = face_recognition.load_image_file(io.BytesIO(image_bytes))  # type: ignore
+    locs = face_recognition.face_locations(image_np)  # type: ignore
+    encs = face_recognition.face_encodings(image_np, locs)  # type: ignore
     if not encs:
         return {"results": []}
 

@@ -104,17 +104,120 @@ def draw_face_box(frame: np.ndarray, face_location: Tuple[int, int, int, int],
     return frame
 
 
-def get_face_encodings_from_image(image: np.ndarray, model: str = "hog") -> List[np.ndarray]:
-    """Extract face encodings from an image."""
+def _compute_eye_centers(landmarks: Dict[str, List[Tuple[int, int]]]) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]:
+    """Compute centers of left and right eyes from landmarks."""
+    try:
+        left_eye_pts = landmarks.get("left_eye") or []
+        right_eye_pts = landmarks.get("right_eye") or []
+        if not left_eye_pts or not right_eye_pts:
+            return None
+        left_eye = (float(np.mean([p[0] for p in left_eye_pts])), float(np.mean([p[1] for p in left_eye_pts])))
+        right_eye = (float(np.mean([p[0] for p in right_eye_pts])), float(np.mean([p[1] for p in right_eye_pts])))
+        return left_eye, right_eye
+    except Exception:
+        return None
+
+
+def align_face_chip(image: np.ndarray, face_location: Tuple[int, int, int, int], output_size: int = 160,
+                    desired_left_eye_x: float = 0.35, desired_eye_y: float = 0.35) -> Optional[np.ndarray]:
+    """
+    Align a face to a canonical pose using eye landmarks and return an aligned face chip.
+
+    Returns an image of shape (output_size, output_size, 3) or None if alignment fails.
+    """
+    try:
+        landmarks_list = face_recognition.face_landmarks(image, [face_location], model="small")
+        if not landmarks_list:
+            return None
+        eyes = _compute_eye_centers(landmarks_list[0])
+        if eyes is None:
+            return None
+        (lX, lY), (rX, rY) = eyes
+
+        dY = rY - lY
+        dX = rX - lX
+        angle = np.degrees(np.arctan2(dY, dX))
+
+        desired_right_eye_x = 1.0 - desired_left_eye_x
+        dist = np.sqrt((dX ** 2) + (dY ** 2))
+        desired_dist = (desired_right_eye_x - desired_left_eye_x) * float(output_size)
+        if dist == 0:
+            return None
+        scale = desired_dist / dist
+
+        eyes_center = (float((lX + rX) / 2.0), float((lY + rY) / 2.0))
+
+        M = cv2.getRotationMatrix2D(eyes_center, angle, scale)
+        tX = float(output_size) * 0.5
+        tY = float(output_size) * desired_eye_y
+        M[0, 2] += (tX - eyes_center[0])
+        M[1, 2] += (tY - eyes_center[1])
+
+        aligned = cv2.warpAffine(image, M, (int(output_size), int(output_size)), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+        return aligned
+    except Exception:
+        return None
+
+
+def get_face_encodings_from_image(image: np.ndarray, model: str = "hog", align: bool = False,
+                                  align_size: int = 160) -> List[np.ndarray]:
+    """Extract face encodings from an image. Optionally align faces before encoding."""
     try:
         face_locations = face_recognition.face_locations(image, model=model)
-        if face_locations:
-            face_encodings = face_recognition.face_encodings(image, face_locations)
-            return face_encodings
-        else:
+        if not face_locations:
             return []
+
+        if not align:
+            return face_recognition.face_encodings(image, face_locations)
+
+        encodings: List[np.ndarray] = []
+        for loc in face_locations:
+            chip = align_face_chip(image, loc, output_size=align_size)
+            if chip is None:
+                # Fallback to non-aligned for this face
+                try:
+                    enc = face_recognition.face_encodings(image, [loc])
+                    if enc:
+                        encodings.append(enc[0])
+                except Exception:
+                    continue
+                continue
+            # Compute encoding on the aligned chip
+            enc = face_recognition.face_encodings(chip)
+            if enc:
+                encodings.append(enc[0])
+        return encodings
     except Exception as e:
         print(f"Error extracting face encodings: {str(e)}")
+        return []
+
+
+def get_face_encodings_with_locations(image: np.ndarray, face_locations: List[Tuple[int, int, int, int]],
+                                      align: bool = False, align_size: int = 160) -> List[np.ndarray]:
+    """Compute encodings for provided face locations with optional alignment."""
+    try:
+        if not face_locations:
+            return []
+        if not align:
+            return face_recognition.face_encodings(image, face_locations)
+
+        encodings: List[np.ndarray] = []
+        for loc in face_locations:
+            chip = align_face_chip(image, loc, output_size=align_size)
+            if chip is None:
+                try:
+                    enc = face_recognition.face_encodings(image, [loc])
+                    if enc:
+                        encodings.append(enc[0])
+                except Exception:
+                    continue
+                continue
+            enc = face_recognition.face_encodings(chip)
+            if enc:
+                encodings.append(enc[0])
+        return encodings
+    except Exception as e:
+        print(f"Error computing encodings with locations: {str(e)}")
         return []
 
 

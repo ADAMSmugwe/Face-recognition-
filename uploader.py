@@ -18,7 +18,12 @@ import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from werkzeug.utils import secure_filename
 
-import face_recognition
+try:
+    import face_recognition  # type: ignore
+    _HAS_FACE_RECOG = True
+except Exception:
+    face_recognition = None  # type: ignore
+    _HAS_FACE_RECOG = False
 
 from database import (
     get_engine, init_db, get_session_maker,
@@ -57,13 +62,16 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
     def index():
         metrics.inc("page.index")
         faces = repo.list_faces()
-        return render_template("index.html", faces=faces)
+        return render_template("index.html", faces=faces, has_face_recognition=_HAS_FACE_RECOG)
 
     @app.route("/upload", methods=["GET", "POST"])
     def upload():
         metrics.inc("page.upload")
         if request.method == "POST":
             with metrics.timer("upload.process_time"):
+                if not _HAS_FACE_RECOG:
+                    flash("face_recognition not available on server. Install dlib to enable uploads.", "error")
+                    return redirect(request.url)
                 name: Optional[str] = request.form.get("name") or None
                 student_id: Optional[str] = request.form.get("student_id") or None
                 as_student = request.form.get("as_student") in ("on", "true", "1")
@@ -78,12 +86,12 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
                 filename = secure_filename(file.filename)
                 image_bytes = file.read()
                 try:
-                    image_np = face_recognition.load_image_file(io.BytesIO(image_bytes))
-                    locs = face_recognition.face_locations(image_np)
+                    image_np = face_recognition.load_image_file(io.BytesIO(image_bytes))  # type: ignore
+                    locs = face_recognition.face_locations(image_np)  # type: ignore
                     if not locs:
                         flash("No face detected in the uploaded image", "error")
                         return redirect(request.url)
-                    encs = face_recognition.face_encodings(image_np, locs)
+                    encs = face_recognition.face_encodings(image_np, locs)  # type: ignore
                     if not encs:
                         flash("Failed to extract encoding", "error")
                         return redirect(request.url)
@@ -157,9 +165,11 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
         return encodings, names
 
     def _recognize_image(image_bytes: bytes, tolerance: float):
-        image_np = face_recognition.load_image_file(io.BytesIO(image_bytes))
-        locs = face_recognition.face_locations(image_np)
-        encs = face_recognition.face_encodings(image_np, locs)
+        if not _HAS_FACE_RECOG:
+            return []
+        image_np = face_recognition.load_image_file(io.BytesIO(image_bytes))  # type: ignore
+        locs = face_recognition.face_locations(image_np)  # type: ignore
+        encs = face_recognition.face_encodings(image_np, locs)  # type: ignore
         if not encs:
             return []
         known_encs, known_names = _load_known(repo)
@@ -189,6 +199,9 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
         if request.method == "POST":
             file = request.files.get("file")
             tolerance = float(request.form.get("tolerance") or DEFAULT_TOLERANCE)
+            if not _HAS_FACE_RECOG:
+                flash("face_recognition not available on server.", "error")
+                return redirect(request.url)
             if not file or file.filename == "":
                 flash("No file selected", "error")
                 return redirect(request.url)
@@ -212,6 +225,8 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
         # Accept multipart file or JSON { image_b64 }
         with metrics.timer("api.recognize_time"):
             tolerance = DEFAULT_TOLERANCE
+            if not _HAS_FACE_RECOG:
+                return jsonify({"error": "face_recognition_unavailable"}), 503
             if request.is_json:
                 try:
                     data = request.get_json(silent=True) or {}
@@ -272,6 +287,8 @@ def create_app(db_url: str = "sqlite:///data/faces.db") -> Flask:
     @app.post("/api/faces")
     def api_create_face():
         with metrics.timer("api.create_face_time"):
+            if not _HAS_FACE_RECOG:
+                return jsonify({"error": "face_recognition_unavailable"}), 503
             name = None
             if request.is_json:
                 data = request.get_json(silent=True) or {}

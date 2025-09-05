@@ -20,7 +20,7 @@ from database import (
     AttendanceRepository,
     AttendancePresentRepository,
 )
-from utils import load_encodings, draw_face_box, load_config, save_encodings
+from utils import load_encodings, draw_face_box, load_config, save_encodings, get_face_encodings_with_locations
 
 
 def parse_args(config) -> argparse.Namespace:
@@ -60,6 +60,17 @@ def parse_args(config) -> argparse.Namespace:
         default=recog_cfg.get("outputs_dir", "outputs/screenshots"),
         help="Directory to save screenshots",
     )
+    parser.add_argument(
+        "--align",
+        action="store_true",
+        help="Align faces using landmarks before encoding for better accuracy",
+    )
+    parser.add_argument(
+        "--align-size",
+        type=int,
+        default=int((recog_cfg.get("align_size") if isinstance(recog_cfg, dict) else 160) or 160),
+        help="Aligned face chip size (pixels)",
+    )
     # DB is now the default storage
     parser.add_argument(
         "--db-url",
@@ -76,6 +87,14 @@ def parse_args(config) -> argparse.Namespace:
         "--attendance-mode",
         action="store_true",
         help="Enable class attendance: match against students and mark present",
+    )
+    # Default to attendance mode enabled
+    parser.set_defaults(attendance_mode=True)
+    parser.add_argument(
+        "--no-attendance-mode",
+        dest="attendance_mode",
+        action="store_false",
+        help="Disable attendance mode (revert to faces table)",
     )
     return parser.parse_args()
 
@@ -171,7 +190,9 @@ def main():
                 
                 # Find faces
                 face_locations = face_recognition.face_locations(rgb_small_frame, model=args.model)
-                face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+                face_encodings = get_face_encodings_with_locations(
+                    rgb_small_frame, face_locations, align=args.align, align_size=args.align_size
+                )
                 
                 face_names = []
                 for face_encoding in face_encodings:
