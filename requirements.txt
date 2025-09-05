@@ -7,3 +7,6 @@ SQLAlchemy==2.0.35
 psycopg2-binary==2.9.9
 Flask==3.0.3
 Werkzeug==3.0.3
+celery==5.4.0
+redis==5.0.7
+boto3==1.35.24

@@ -52,11 +52,7 @@ def parse_args(config) -> argparse.Namespace:
         default=recog_cfg.get("outputs_dir", "outputs/screenshots"),
         help="Directory to save screenshots",
     )
-    parser.add_argument(
-        "--use-db",
-        action="store_true",
-        help="Load/save encodings from SQLite database instead of pickle",
-    )
+    # DB is now the default storage
     parser.add_argument(
         "--db-url",
         default=(recog_cfg.get("db_url") if isinstance(recog_cfg, dict) else None) or "sqlite:///data/faces.db",
@@ -81,26 +77,12 @@ def main():
     
     # Load known faces
     print("Loading known face encodings...")
-    if args.use_db:
-        engine = get_engine(args.db_url)
-        init_db(engine)
-        Session = get_session_maker(engine)
-        repo = FaceRepository(Session)
-        known_encodings, known_names = repo.get_all_faces()
-        print(f"Loaded {len(known_encodings)} encodings from DB: {args.db_url}")
-    else:
-        encodings_data = load_encodings(encodings_file)
-        if encodings_data is None:
-            print("No encodings found. Starting with an empty database.")
-            print("Press 'a' to enroll your face and save it.")
-            known_encodings = []
-            known_names = []
-        else:
-            known_encodings = encodings_data["encodings"]
-            known_names = encodings_data["names"]
-            print(f"Loaded {len(known_encodings)} face encodings")
-            if known_names:
-                print("Known individuals:", ", ".join(set(known_names)))
+    engine = get_engine(args.db_url)
+    init_db(engine)
+    Session = get_session_maker(engine)
+    repo = FaceRepository(Session)
+    known_encodings, known_names = repo.get_all_faces()
+    print(f"Loaded {len(known_encodings)} encodings from DB: {args.db_url}")
     
     # Initialize camera
     print("Initializing camera...")
@@ -145,16 +127,10 @@ def main():
             # Periodically refresh encodings from source
             if args.refresh_interval and (time.time() - last_refresh_time) >= args.refresh_interval:
                 try:
-                    if args.use_db:
-                        engine = get_engine(args.db_url)
-                        Session = get_session_maker(engine)
-                        repo = FaceRepository(Session)
-                        known_encodings, known_names = repo.get_all_faces()
-                    else:
-                        encodings_data = load_encodings(encodings_file)
-                        if encodings_data:
-                            known_encodings = encodings_data["encodings"]
-                            known_names = encodings_data["names"]
+                    engine = get_engine(args.db_url)
+                    Session = get_session_maker(engine)
+                    repo = FaceRepository(Session)
+                    known_encodings, known_names = repo.get_all_faces()
                     last_refresh_time = time.time()
                 except Exception:
                     # Ignore refresh errors; continue with existing encodings
@@ -267,26 +243,10 @@ def main():
                         known_names.append(person_name)
 
                     # Persist to DB or file
-                    if args.use_db:
-                        engine = get_engine(args.db_url)
-                        init_db(engine)
-                        Session = get_session_maker(engine)
-                        repo = FaceRepository(Session)
-                        for enc in enrollment_encodings:
-                            repo.add_face(person_name, enc)
-                        print(f"✓ Enrolled '{person_name}' with {len(enrollment_encodings)} samples to DB.")
-                        known_encodings, known_names = repo.get_all_faces()
-                    else:
-                        enc_data = {
-                            "encodings": known_encodings,
-                            "names": known_names,
-                            "total_faces": len(known_encodings),
-                        }
-                        os.makedirs(os.path.dirname(encodings_file), exist_ok=True)
-                        if save_encodings(enc_data, encodings_file):
-                            print(f"✓ Enrolled '{person_name}' with {len(enrollment_encodings)} samples.")
-                        else:
-                            print("! Failed to save updated encodings.")
+                    for enc in enrollment_encodings:
+                        repo.add_face(person_name, enc)
+                    print(f"✓ Enrolled '{person_name}' with {len(enrollment_encodings)} samples to DB.")
+                    known_encodings, known_names = repo.get_all_faces()
 
                     # Also save a cropped example image to known_faces
                     try:

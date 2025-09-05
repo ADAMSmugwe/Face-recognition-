@@ -36,11 +36,7 @@ def parse_args(config) -> argparse.Namespace:
         choices=["hog", "cnn"],
         help="Face detection model (hog=CPU, cnn=GPU)",
     )
-    parser.add_argument(
-        "--use-db",
-        action="store_true",
-        help="Save encodings into SQLite database instead of pickle",
-    )
+    # DB is now the default storage
     parser.add_argument(
         "--db-path",
         default=encoder_cfg.get("db_path", "data/faces.db"),
@@ -118,38 +114,17 @@ def main():
         print("No face encodings were created.")
         return False
     
-    if args.use_db:
-        engine = get_engine(args.db_url)
-        init_db(engine)
-        Session = get_session_maker(engine)
-        repo = FaceRepository(Session)
-        added = 0
-        for enc, name in zip(known_encodings, known_names):
-            repo.add_face(name, enc)
-            added += 1
-        print(f"\n✓ Saved {added} encodings into database: {args.db_url}")
-        print("You can now run 'python3 recognize.py --use-db --db-url ...' to start recognition.")
-        return True
-    else:
-        # Save to pickle file
-        encodings_data = {
-            "encodings": known_encodings,
-            "names": known_names,
-            "total_faces": len(known_encodings)
-        }
-        success = save_encodings(encodings_data, output_file)
-        
-        if success:
-            print(f"\n✓ Successfully encoded {len(known_encodings)} faces!")
-            print(f"Recognized individuals:")
-            for i, name in enumerate(set(known_names), 1):
-                count = known_names.count(name)
-                print(f"  {i}. {name} ({count} encoding{'s' if count > 1 else ''})")
-            print(f"\nYou can now run 'python3 recognize.py' to start recognition.")
-            return True
-        else:
-            print("Failed to save encodings.")
-            return False
+    engine = get_engine(args.db_url)
+    init_db(engine)
+    Session = get_session_maker(engine)
+    repo = FaceRepository(Session)
+    added = 0
+    for enc, name in zip(known_encodings, known_names):
+        repo.add_face(name, enc)
+        added += 1
+    print(f"\n✓ Saved {added} encodings into database: {args.db_url}")
+    print("You can now run 'python3 recognize.py --db-url ...' to start recognition.")
+    return True
 
 
 if __name__ == "__main__":

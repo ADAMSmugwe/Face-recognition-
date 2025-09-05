@@ -15,7 +15,10 @@
   <body>
     <div class="top">
       <h1>Face Database</h1>
-      <a class="button" href="/upload">Upload Face</a>
+      <div style="display:flex; gap:0.5rem;">
+        <a class="button" href="/upload">Upload Face</a>
+        <a class="button" href="/recognize" style="background:#0a7d3b;">Recognize Photo</a>
+      </div>
     </div>
     {% if faces and faces|length > 0 %}
       <table>
@@ -24,6 +27,7 @@
             <th>ID</th>
             <th>Name</th>
             <th>Created</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -32,6 +36,11 @@
             <td>{{ f.id }}</td>
             <td>{{ f.name or 'Unknown' }}</td>
             <td>{{ f.created_at }}</td>
+            <td>
+              <form method="post" action="/faces/{{ f.id }}/delete" onsubmit="return confirm('Delete this face?');">
+                <button type="submit" style="background:#c62828; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer;">Delete</button>
+              </form>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
