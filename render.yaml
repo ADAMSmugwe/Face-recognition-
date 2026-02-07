@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: face-recognition-ksef
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: PORT
+        value: 5001

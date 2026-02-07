@@ -862,6 +862,8 @@ def get_stats():
     })
 
 if __name__ == '__main__':
+    import os
+    
     print("\n" + "="*60)
     print("🎓 FACE RECOGNITION WEB DASHBOARD")
     print("="*60)
@@ -877,4 +879,7 @@ if __name__ == '__main__':
     # Load initial encodings
     load_encodings()
     
-    app.run(debug=True, host='0.0.0.0', port=5001, threaded=True)
+    # Get port from environment variable (for deployment) or use 5001
+    port = int(os.environ.get('PORT', 5001))
+    
+    app.run(debug=True, host='0.0.0.0', port=port, threaded=True)
