@@ -1,0 +1,13 @@
+encoder:
+  input_dir: known_faces
+  output_file: encodings/face_encodings.pkl
+  model: hog
+
+recognizer:
+  encodings_file: encodings/face_encodings.pkl
+  camera_index: 0
+  tolerance: 0.6
+  model: hog
+  outputs_dir: outputs/screenshots
+  db_path: data/faces.db
+

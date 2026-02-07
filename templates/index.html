@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Face DB - Home</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+      a.button { padding: 0.5rem 1rem; background: #2d6cdf; color: #fff; text-decoration: none; border-radius: 6px; }
+      table { border-collapse: collapse; margin-top: 1rem; width: 100%; }
+      th, td { border: 1px solid #ddd; padding: 8px; }
+      th { background: #f4f6f8; text-align: left; }
+      .top { display: flex; align-items: center; justify-content: space-between; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <h1>Face Database</h1>
+      <div style="display:flex; gap:0.5rem;">
+        <a class="button" href="/upload">Upload Face</a>
+        <a class="button" href="/recognize" style="background:#0a7d3b;">Recognize Photo</a>
+        <a class="button" href="/attendance" style="background:#6d28d9;">Attendance Register</a>
+      </div>
+    </div>
+    {% if faces and faces|length > 0 %}
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in faces %}
+          <tr>
+            <td>{{ f.id }}</td>
+            <td>{{ f.name or 'Unknown' }}</td>
+            <td>{{ f.created_at }}</td>
+            <td>
+              <form method="post" action="/faces/{{ f.id }}/delete" onsubmit="return confirm('Delete this face?');">
+                <button type="submit" style="background:#c62828; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer;">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>No faces saved yet. Click "Upload Face" to add one.</p>
+    {% endif %}
+  </body>
+  </html>
+
+
