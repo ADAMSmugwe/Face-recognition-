@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px 30px;
+            border: none;
+            background: #f0f0f0;
+            color: #666;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Students Management */
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .students-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 25px;
+            margin-top: 25px;
+        }
+
+        .student-card {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+
+        .student-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .student-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .student-name {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .student-photos {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .photo-thumbnail {
+            width: 80px;
+            height: 80px;
+            border-radius: 8px;
+            object-fit: cover;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid #e5e7eb;
+        }
+
+        .photo-thumbnail:hover {
+            transform: scale(1.1);
+            border-color: #667eea;
+        }
+
+        .student-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-small {
+            padding: 8px 15px;
+            font-size: 13px;
+        }
+
+        /* Recognition Section */
+        .recognition-container {
+            text-align: center;
+        }
+
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 25px 0;
+            max-width: 100%;
+        }
+
+        #videoFeed {
+            width: 100%;
+            height: auto;
+            display: none;
+        }
+
+        .video-placeholder {
+            padding: 100px 20px;
+            color: #666;
+            font-size: 1.2em;
+        }
+
+        .recognition-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            animation: fadeIn 0.3s;
+        }
+
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 600px;
+            animation: slideDown 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .modal-title {
+            font-size: 1.8em;
+            color: #1f2937;
+        }
+
+        .close {
+            font-size: 35px;
+            font-weight: bold;
+            color: #999;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .close:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .file-upload {
+            border: 3px dashed #d1d5db;
+            padding: 30px;
+            text-align: center;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+            background: #f9fafb;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border-left: 4px solid #ef4444;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎓 Face Recognition Dashboard</h1>
+            <p class="subtitle">Manage students and recognize faces in real-time</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('students')">
+                👥 Students Management
+            </button>
+            <button class="tab-btn" onclick="switchTab('attendance')">
+                📋 Attendance Register
+            </button>
+            <button class="tab-btn" onclick="switchTab('recognition')">
+                🎥 Face Recognition
+            </button>
+            <button class="tab-btn" onclick="switchTab('settings')">
+                ⚙️ Settings
+            </button>
+        </div>
+
+        <!-- Students Tab -->
+        <div id="students" class="tab-content active">
+            <div class="alert alert-success" id="successAlert"></div>
+            <div class="alert alert-error" id="errorAlert"></div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalStudents">0</div>
+                    <div class="stat-label">Total Students</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalPhotos">0</div>
+                    <div class="stat-label">Total Photos</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalEncodings">0</div>
+                    <div class="stat-label">Encodings</div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="openAddStudentModal()">
+                    ➕ Add New Student
+                </button>
+                <button class="btn btn-success" onclick="rebuildEncodings()">
+                    🔄 Rebuild All Encodings
+                </button>
+                <button class="btn btn-primary" onclick="loadStudents()">
+                    🔃 Refresh List
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p style="margin-top: 10px;">Loading...</p>
+            </div>
+
+            <div class="students-grid" id="studentsGrid"></div>
+        </div>
+
+        <!-- Attendance Tab -->
+        <div id="attendance" class="tab-content">
+            <h2 style="margin-bottom: 25px;">📋 Class Attendance Register</h2>
+
+            <div class="stats">
+                <div class="stat-card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                    <div class="stat-number" id="presentCount">0</div>
+                    <div class="stat-label">Present Today</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                    <div class="stat-number" id="absentCount">0</div>
+                    <div class="stat-label">Absent Today</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="attendanceDate">--</div>
+                    <div class="stat-label">Today's Date</div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-success" onclick="loadAttendance()">
+                    🔄 Refresh Attendance
+                </button>
+                <button class="btn btn-warning" onclick="clearAttendance()">
+                    🗑️ Clear Today's Attendance
+                </button>
+                <button class="btn btn-primary" onclick="exportAttendance()">
+                    📥 Export Attendance
+                </button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;">
+                <!-- Present Students -->
+                <div style="background: #d1fae5; padding: 25px; border-radius: 12px; border-left: 5px solid #10b981;">
+                    <h3 style="color: #065f46; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                        ✅ Present (<span id="presentListCount">0</span>)
+                    </h3>
+                    <div id="presentList" style="max-height: 500px; overflow-y: auto;">
+                        <p style="color: #6b7280; text-align: center; padding: 20px;">No students marked present yet</p>
+                    </div>
+                </div>
+
+                <!-- Absent Students -->
+                <div style="background: #fee2e2; padding: 25px; border-radius: 12px; border-left: 5px solid #ef4444;">
+                    <h3 style="color: #991b1b; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                        ❌ Absent (<span id="absentListCount">0</span>)
+                    </h3>
+                    <div id="absentList" style="max-height: 500px; overflow-y: auto;">
+                        <p style="color: #6b7280; text-align: center; padding: 20px;">No absent students</p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 30px; background: #fef3c7; padding: 25px; border-radius: 12px;">
+                <h3 style="margin-bottom: 15px;">💡 How Attendance Works:</h3>
+                <ul style="line-height: 2; color: #78350f;">
+                    <li>🎥 <strong>Auto-Mark:</strong> Students are automatically marked present when recognized by the camera</li>
+                    <li>✅ <strong>Manual Mark:</strong> Click on any absent student to manually mark them present</li>
+                    <li>❌ <strong>Unmark:</strong> Click on any present student to mark them absent</li>
+                    <li>🔄 <strong>Real-Time:</strong> Attendance updates live during face recognition</li>
+                    <li>📅 <strong>Daily Reset:</strong> Each day starts with a fresh attendance sheet</li>
+                    <li>💾 <strong>Auto-Save:</strong> Attendance is saved with timestamps</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Recognition Tab -->
+        <div id="recognition" class="tab-content">
+            <div class="recognition-container">
+                <h2 style="margin-bottom: 25px;">Live Face Recognition</h2>
+                
+                <div class="video-container">
+                    <img id="videoFeed" alt="Video Feed">
+                    <div class="video-placeholder" id="videoPlaceholder">
+                        Click "Start Recognition" to begin
+                    </div>
+                </div>
+
+                <div class="recognition-controls">
+                    <button class="btn btn-success" onclick="startRecognition()">
+                        ▶️ Start Recognition
+                    </button>
+                    <button class="btn btn-danger" onclick="stopRecognition()">
+                        ⏹️ Stop Recognition
+                    </button>
+                </div>
+
+                <div style="margin-top: 30px; text-align: left; background: #f9fafb; padding: 20px; border-radius: 12px;">
+                    <h3 style="margin-bottom: 15px;">📌 Instructions:</h3>
+                    <ul style="line-height: 2; color: #4b5563;">
+                        <li>✅ Make sure you have good lighting</li>
+                        <li>📸 Look directly at the camera</li>
+                        <li>👤 Only one person should be visible at a time</li>
+                        <li>🎯 Green box = Recognized student</li>
+                        <li>❌ Red box = Unknown person</li>
+                        <li>⚠️ Orange warning = Too dark or no face detected</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content">
+            <h2 style="margin-bottom: 25px;">⚙️ System Settings</h2>
+            
+            <div style="background: #e0e7ff; padding: 25px; border-radius: 12px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px;">🔊 Voice Settings</h3>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Select Voice:</label>
+                    <select id="voiceSelector" onchange="updateSelectedVoice()" style="width: 100%; padding: 12px; border: 2px solid #667eea; border-radius: 8px; font-size: 16px; background: white;">
+                        <option value="">Loading voices...</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Voice Speed: <span id="rateValue">1.0</span>x</label>
+                    <input type="range" id="voiceRate" min="0.5" max="2.0" step="0.1" value="1.0" oninput="updateRateValue(this.value)" style="width: 100%;">
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Voice Pitch: <span id="pitchValue">1.2</span></label>
+                    <input type="range" id="voicePitch" min="0.5" max="2.0" step="0.1" value="1.2" oninput="updatePitchValue(this.value)" style="width: 100%;">
+                </div>
+                
+                <button class="btn btn-primary" onclick="testSelectedVoice()" style="width: 100%;">
+                    🎤 Test Voice: "Welcome! Face recognition system activated."
+                </button>
+            </div>
+            
+            <div style="background: #f9fafb; padding: 25px; border-radius: 12px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px;">System Information</h3>
+                <p><strong>Images Directory:</strong> /images/</p>
+                <p><strong>Encodings File:</strong> /encodings/known_faces.pkl</p>
+                <p><strong>Max Upload Size:</strong> 16 MB per file</p>
+                <p><strong>Allowed Formats:</strong> JPG, JPEG, PNG</p>
+                <p><strong>Available Voices:</strong> <span id="voiceCount">0</span></p>
+            </div>
+
+            <div style="background: #fef3c7; padding: 25px; border-radius: 12px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px;">💡 Tips for Best Results</h3>
+                <ul style="line-height: 2;">
+                    <li>Upload 3-5 clear photos per student</li>
+                    <li>Photos should have good lighting</li>
+                    <li>Face should be clearly visible and facing forward</li>
+                    <li>Avoid sunglasses, masks, or extreme angles</li>
+                    <li>Higher quality photos = better recognition</li>
+                </ul>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-warning" onclick="clearAllData()">
+                    🗑️ Clear All Data (Danger!)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Student Modal -->
+    <div id="addStudentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">➕ Add New Student</h2>
+                <span class="close" onclick="closeAddStudentModal()">&times;</span>
+            </div>
+            
+            <form id="addStudentForm" onsubmit="addStudent(event)">
+                <div class="form-group">
+                    <label class="form-label">Student Name *</label>
+                    <input type="text" class="form-input" id="studentName" placeholder="Enter student name" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Upload Photos * (3-5 recommended)</label>
+                    <div class="file-upload" onclick="document.getElementById('photoFiles').click()">
+                        <input type="file" id="photoFiles" multiple accept="image/*" onchange="updateFileList()">
+                        <p style="margin-bottom: 10px; font-size: 3em;">📸</p>
+                        <p id="fileListText">Click to select photos or drag & drop</p>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        ✅ Add Student
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="closeAddStudentModal()">
+                        ❌ Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let students = [];
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+
+            // Load data if needed
+            if (tabName === 'students') {
+                loadStudents();
+            } else if (tabName === 'attendance') {
+                loadAttendance();
+            }
+        }
+
+        // Load students
+        async function loadStudents() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('studentsGrid').innerHTML = '';
+
+            try {
+                const response = await fetch('/api/students');
+                const data = await response.json();
+                students = data.students;
+
+                // Update stats
+                document.getElementById('totalStudents').textContent = data.total;
+                document.getElementById('totalPhotos').textContent = 
+                    students.reduce((sum, s) => sum + s.image_count, 0);
+
+                // Render students
+                const grid = document.getElementById('studentsGrid');
+                
+                if (students.length === 0) {
+                    grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 50px; color: #999;">No students added yet. Click "Add New Student" to get started!</p>';
+                } else {
+                    students.forEach(student => {
+                        grid.innerHTML += createStudentCard(student);
+                    });
+                }
+            } catch (error) {
+                showError('Failed to load students: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // Create student card HTML
+        function createStudentCard(student) {
+            const photosHTML = student.images.slice(0, 3).map(img => 
+                `<img src="/images/${student.name}/${img}" class="photo-thumbnail" 
+                      alt="${student.name}" onclick="viewPhoto('${student.name}', '${img}')">`
+            ).join('');
+
+            const moreCount = student.image_count > 3 ? ` +${student.image_count - 3} more` : '';
+
+            return `
+                <div class="student-card">
+                    <div class="student-header">
+                        <div class="student-name">${student.name}</div>
+                    </div>
+                    <div class="student-photos">
+                        ${photosHTML}
+                    </div>
+                    <p style="color: #666; margin-bottom: 15px; font-size: 0.9em;">
+                        ${student.image_count} photo${student.image_count !== 1 ? 's' : ''}${moreCount}
+                    </p>
+                    <div class="student-actions">
+                        <button class="btn btn-primary btn-small" onclick="addMorePhotos('${student.name}')">
+                            ➕ Add Photos
+                        </button>
+                        <button class="btn btn-warning btn-small" onclick="renameStudent('${student.name}')">
+                            ✏️ Rename
+                        </button>
+                        <button class="btn btn-danger btn-small" onclick="deleteStudent('${student.name}')">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Modal functions
+        function openAddStudentModal() {
+            document.getElementById('addStudentModal').style.display = 'block';
+        }
+
+        function closeAddStudentModal() {
+            document.getElementById('addStudentModal').style.display = 'none';
+            document.getElementById('addStudentForm').reset();
+            document.getElementById('fileListText').textContent = 'Click to select photos or drag & drop';
+        }
+
+        function updateFileList() {
+            const files = document.getElementById('photoFiles').files;
+            const text = document.getElementById('fileListText');
+            if (files.length > 0) {
+                text.textContent = `${files.length} file${files.length !== 1 ? 's' : ''} selected`;
+            } else {
+                text.textContent = 'Click to select photos or drag & drop';
+            }
+        }
+
+        // Add student
+        async function addStudent(event) {
+            event.preventDefault();
+
+            const name = document.getElementById('studentName').value.trim();
+            const files = document.getElementById('photoFiles').files;
+
+            if (!name || files.length === 0) {
+                showError('Please enter a name and select at least one photo');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('name', name);
+            
+            for (let file of files) {
+                formData.append('photos', file);
+            }
+
+            try {
+                document.getElementById('loading').style.display = 'block';
+                const response = await fetch('/api/student/add', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message);
+                    closeAddStudentModal();
+                    loadStudents();
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                showError('Failed to add student: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // Delete student
+        async function deleteStudent(name) {
+            if (!confirm(`Are you sure you want to delete ${name}? This will delete all their photos and cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/student/${name}/delete`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message);
+                    loadStudents();
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                showError('Failed to delete student: ' + error.message);
+            }
+        }
+
+        // Rename student
+        async function renameStudent(oldName) {
+            const newName = prompt(`Enter new name for ${oldName}:`, oldName);
+            
+            if (!newName || newName === oldName) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/student/${oldName}/rename`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ new_name: newName })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message);
+                    loadStudents();
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                showError('Failed to rename student: ' + error.message);
+            }
+        }
+
+        // Add more photos
+        function addMorePhotos(name) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = 'image/*';
+            
+            input.onchange = async (e) => {
+                const files = e.target.files;
+                if (files.length === 0) return;
+
+                const formData = new FormData();
+                for (let file of files) {
+                    formData.append('photos', file);
+                }
+
+                try {
+                    document.getElementById('loading').style.display = 'block';
+                    const response = await fetch(`/api/student/${name}/add-photos`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showSuccess(data.message);
+                        loadStudents();
+                    } else {
+                        showError(data.error);
+                    }
+                } catch (error) {
+                    showError('Failed to add photos: ' + error.message);
+                } finally {
+                    document.getElementById('loading').style.display = 'none';
+                }
+            };
+
+            input.click();
+        }
+
+        // Rebuild encodings
+        async function rebuildEncodings() {
+            if (!confirm('Rebuild all face encodings? This may take a moment.')) {
+                return;
+            }
+
+            try {
+                document.getElementById('loading').style.display = 'block';
+                const response = await fetch('/api/encodings/rebuild', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message);
+                    loadStudents();
+                } else {
+                    showError('Failed to rebuild encodings');
+                }
+            } catch (error) {
+                showError('Failed to rebuild encodings: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // Face recognition
+        function startRecognition() {
+            fetch('/api/recognition/start', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('videoFeed').src = '/video-feed';
+                    document.getElementById('videoFeed').style.display = 'block';
+                    document.getElementById('videoPlaceholder').style.display = 'none';
+                    showSuccess('Recognition started! Attendance will be marked automatically.');
+                    
+                    // Announce start
+                    speak("Face recognition activated. Please look at the camera.", 1.0, 1.0);
+                    playSound(600, 0.2, 'sine');
+                    
+                    // Auto-refresh attendance every 5 seconds during recognition
+                    window.attendanceRefreshInterval = setInterval(loadAttendance, 5000);
+                    
+                    // Start recognition monitoring for sound/voice
+                    recognitionMonitor = setInterval(monitorRecognition, FRAME_CHECK_INTERVAL);
+                })
+                .catch(error => {
+                    showError('Failed to start recognition: ' + error.message);
+                });
+        }
+
+        function stopRecognition() {
+            fetch('/api/recognition/stop', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('videoFeed').style.display = 'none';
+                    document.getElementById('videoPlaceholder').style.display = 'block';
+                    showSuccess('Recognition stopped');
+                    
+                    // Announce stop
+                    speak("Recognition stopped.", 1.0, 1.0);
+                    
+                    // Stop auto-refresh
+                    if (window.attendanceRefreshInterval) {
+                        clearInterval(window.attendanceRefreshInterval);
+                    }
+                    
+                    // Stop recognition monitor
+                    if (recognitionMonitor) {
+                        clearInterval(recognitionMonitor);
+                        recognitionMonitor = null;
+                    }
+                    
+                    // Clear announcement tracking
+                    announcedStudents.clear();
+                    lastAnnouncementTime = {};
+                    
+                    // Final refresh of attendance
+                    loadAttendance();
+                })
+                .catch(error => {
+                    showError('Failed to stop recognition: ' + error.message);
+                });
+        }
+
+        // Attendance functions
+        async function loadAttendance() {
+            try {
+                const response = await fetch('/api/attendance/today');
+                const data = await response.json();
+                
+                // Update stats
+                document.getElementById('presentCount').textContent = data.present_count;
+                document.getElementById('absentCount').textContent = data.absent_count;
+                document.getElementById('attendanceDate').textContent = data.date;
+                document.getElementById('presentListCount').textContent = data.present_count;
+                document.getElementById('absentListCount').textContent = data.absent_count;
+                
+                // Update present list
+                const presentList = document.getElementById('presentList');
+                if (data.present.length === 0) {
+                    presentList.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 20px;">No students marked present yet</p>';
+                } else {
+                    presentList.innerHTML = data.present.map(name => {
+                        const time = data.attendance_details[name] || '--:--:--';
+                        return `
+                            <div style="background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.3s;" 
+                                 onclick="unmarkStudent('${name}')" 
+                                 onmouseover="this.style.background='#f3f4f6'" 
+                                 onmouseout="this.style.background='white'">
+                                <div>
+                                    <div style="font-weight: 600; color: #1f2937; font-size: 1.1em;">✅ ${name}</div>
+                                    <div style="color: #6b7280; font-size: 0.9em; margin-top: 4px;">Marked at ${time}</div>
+                                </div>
+                                <div style="color: #ef4444; font-size: 0.85em; opacity: 0.7;">Click to unmark</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+                
+                // Update absent list
+                const absentList = document.getElementById('absentList');
+                if (data.absent.length === 0) {
+                    absentList.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 20px;">All students are present! 🎉</p>';
+                } else {
+                    absentList.innerHTML = data.absent.map(name => `
+                        <div style="background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.3s;" 
+                             onclick="markStudent('${name}')" 
+                             onmouseover="this.style.background='#f3f4f6'" 
+                             onmouseout="this.style.background='white'">
+                            <div style="font-weight: 600; color: #1f2937; font-size: 1.1em;">❌ ${name}</div>
+                            <div style="color: #10b981; font-size: 0.85em; opacity: 0.7;">Click to mark present</div>
+                        </div>
+                    `).join('');
+                }
+                
+            } catch (error) {
+                console.error('Failed to load attendance:', error);
+            }
+        }
+
+        async function markStudent(name) {
+            try {
+                const response = await fetch('/api/attendance/mark', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ student_name: name })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message);
+                    loadAttendance();
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                showError('Failed to mark student: ' + error.message);
+            }
+        }
+
+        async function unmarkStudent(name) {
+            if (!confirm(`Mark ${name} as absent?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/attendance/unmark', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ student_name: name })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message);
+                    loadAttendance();
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                showError('Failed to unmark student: ' + error.message);
+            }
+        }
+
+        async function clearAttendance() {
+            if (!confirm('Clear today\'s attendance? This cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/attendance/clear', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.message);
+                    loadAttendance();
+                } else {
+                    showError('Failed to clear attendance');
+                }
+            } catch (error) {
+                showError('Failed to clear attendance: ' + error.message);
+            }
+        }
+
+        async function exportAttendance() {
+            try {
+                const response = await fetch('/api/attendance/export');
+                const data = await response.json();
+                
+                // Create CSV format
+                let csv = 'Student Name,' + data.dates.join(',') + '\n';
+                
+                for (let student of data.students) {
+                    let row = student;
+                    for (let date of data.dates) {
+                        row += ',' + (data.attendance[student][date] ? 'Present' : 'Absent');
+                    }
+                    csv += row + '\n';
+                }
+                
+                // Download as file
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `attendance_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showSuccess('Attendance exported successfully!');
+            } catch (error) {
+                showError('Failed to export attendance: ' + error.message);
+            }
+        }
+
+        // View photo
+        function viewPhoto(studentName, photoName) {
+            window.open(`/images/${studentName}/${photoName}`, '_blank');
+        }
+
+        // Clear all data
+        function clearAllData() {
+            if (!confirm('WARNING: This will delete ALL students and photos! This cannot be undone. Are you absolutely sure?')) {
+                return;
+            }
+            
+            if (!confirm('Last chance! This will permanently delete everything. Continue?')) {
+                return;
+            }
+
+            showError('Feature disabled for safety. Please manually delete files if needed.');
+        }
+
+        // ============================================
+        // 🔊 SOUND AND VOICE ANNOUNCEMENT SYSTEM
+        // ============================================
+        
+        // Track recognized students to avoid repeated announcements
+        let announcedStudents = new Set();
+        let lastAnnouncementTime = {};
+        const ANNOUNCEMENT_COOLDOWN = 5000; // 5 seconds between same announcements
+        
+        // Play sound effect
+        function playSound(frequency, duration, type = 'sine') {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+        
+        // Play recognition success sound (pleasant chime)
+        function playRecognizedSound() {
+            playSound(800, 0.1, 'sine');
+            setTimeout(() => playSound(1000, 0.15, 'sine'), 100);
+        }
+        
+        // Play unknown/not recognized sound (low beep)
+        function playNotRecognizedSound() {
+            playSound(200, 0.3, 'sawtooth');
+        }
+        
+        // Play welcome sound (happy melody)
+        function playWelcomeSound() {
+            playSound(523, 0.15, 'sine'); // C
+            setTimeout(() => playSound(659, 0.15, 'sine'), 150); // E
+            setTimeout(() => playSound(784, 0.2, 'sine'), 300); // G
+        }
+        
+        // Voice settings
+        let selectedVoice = null;
+        let voiceRate = 1.0;
+        let voicePitch = 1.2;
+        
+        // Speak text using Web Speech API with customizable voice
+        function speak(text, rate = null, pitch = null) {
+            if ('speechSynthesis' in window) {
+                // Cancel any ongoing speech
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = rate || voiceRate;
+                utterance.pitch = pitch || voicePitch;
+                utterance.volume = 0.8;
+                
+                // Use selected voice or try to find a female voice
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                } else {
+                    const voices = window.speechSynthesis.getVoices();
+                    const femaleVoice = voices.find(voice => 
+                        voice.name.toLowerCase().includes('female') ||
+                        voice.name.toLowerCase().includes('samantha') ||
+                        voice.name.toLowerCase().includes('victoria') ||
+                        voice.name.toLowerCase().includes('karen') ||
+                        voice.name.toLowerCase().includes('moira') ||
+                        voice.name.toLowerCase().includes('fiona') ||
+                        voice.name.toLowerCase().includes('zira') ||
+                        voice.name.toLowerCase().includes('susan') ||
+                        voice.name.toLowerCase().includes('google us english') && voice.name.toLowerCase().includes('female')
+                    );
+                    
+                    if (femaleVoice) {
+                        utterance.voice = femaleVoice;
+                    }
+                }
+                
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+        
+        // Populate voice selector
+        function populateVoiceSelector() {
+            const voices = window.speechSynthesis.getVoices();
+            const selector = document.getElementById('voiceSelector');
+            
+            if (voices.length === 0) {
+                return; // Voices not loaded yet
+            }
+            
+            // Update voice count
+            document.getElementById('voiceCount').textContent = voices.length;
+            
+            // Clear existing options
+            selector.innerHTML = '';
+            
+            // Group voices by language
+            const femaleVoices = [];
+            const otherVoices = [];
+            
+            voices.forEach((voice, index) => {
+                const isFemale = voice.name.toLowerCase().includes('female') ||
+                                 voice.name.toLowerCase().includes('samantha') ||
+                                 voice.name.toLowerCase().includes('victoria') ||
+                                 voice.name.toLowerCase().includes('karen') ||
+                                 voice.name.toLowerCase().includes('moira') ||
+                                 voice.name.toLowerCase().includes('fiona') ||
+                                 voice.name.toLowerCase().includes('susan') ||
+                                 voice.name.toLowerCase().includes('zira');
+                
+                const option = {
+                    value: index,
+                    text: `${voice.name} (${voice.lang})${isFemale ? ' ⭐ Female' : ''}`,
+                    voice: voice,
+                    isFemale: isFemale
+                };
+                
+                if (isFemale) {
+                    femaleVoices.push(option);
+                } else {
+                    otherVoices.push(option);
+                }
+            });
+            
+            // Add female voices first
+            if (femaleVoices.length > 0) {
+                const femaleGroup = document.createElement('optgroup');
+                femaleGroup.label = '⭐ Recommended Female Voices';
+                femaleVoices.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.text;
+                    femaleGroup.appendChild(option);
+                });
+                selector.appendChild(femaleGroup);
+            }
+            
+            // Add other voices
+            const otherGroup = document.createElement('optgroup');
+            otherGroup.label = 'Other Voices';
+            otherVoices.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.textContent = opt.text;
+                otherGroup.appendChild(option);
+            });
+            selector.appendChild(otherGroup);
+            
+            // Select first female voice by default
+            if (femaleVoices.length > 0) {
+                selector.value = femaleVoices[0].value;
+                selectedVoice = voices[femaleVoices[0].value];
+            }
+        }
+        
+        // Update selected voice
+        function updateSelectedVoice() {
+            const selector = document.getElementById('voiceSelector');
+            const voices = window.speechSynthesis.getVoices();
+            selectedVoice = voices[selector.value];
+        }
+        
+        // Test selected voice
+        function testSelectedVoice() {
+            updateSelectedVoice();
+            speak("Welcome! Face recognition system activated. This is how I sound.", voiceRate, voicePitch);
+        }
+        
+        // Update rate value display
+        function updateRateValue(value) {
+            voiceRate = parseFloat(value);
+            document.getElementById('rateValue').textContent = value;
+        }
+        
+        // Update pitch value display
+        function updatePitchValue(value) {
+            voicePitch = parseFloat(value);
+            document.getElementById('pitchValue').textContent = value;
+        }
+        
+        // Load voices when they become available
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = function() {
+                populateVoiceSelector();
+                const voices = window.speechSynthesis.getVoices();
+                console.log('Available voices:', voices.map(v => v.name));
+            };
+            // Try to load immediately
+            populateVoiceSelector();
+        }
+        
+        // Announce student recognition
+        function announceRecognition(studentName, confidence) {
+            const now = Date.now();
+            
+            // Check cooldown to avoid spam
+            if (lastAnnouncementTime[studentName] && 
+                (now - lastAnnouncementTime[studentName]) < ANNOUNCEMENT_COOLDOWN) {
+                return; // Skip announcement if too soon
+            }
+            
+            lastAnnouncementTime[studentName] = now;
+            
+            // Play sound
+            playRecognizedSound();
+            
+            // Voice announcement
+            const confPercent = Math.round(confidence);
+            let message = `Recognized, ${studentName}`;
+            
+            if (confPercent >= 90) {
+                message = `Welcome ${studentName}!`;
+                playWelcomeSound();
+            } else if (confPercent >= 75) {
+                message = `Hello ${studentName}`;
+            }
+            
+            speak(message, 1.1, 1.1);
+        }
+        
+        // Announce unknown face
+        function announceUnknown() {
+            const now = Date.now();
+            
+            if (lastAnnouncementTime['unknown'] && 
+                (now - lastAnnouncementTime['unknown']) < ANNOUNCEMENT_COOLDOWN * 2) {
+                return; // Longer cooldown for unknown
+            }
+            
+            lastAnnouncementTime['unknown'] = now;
+            playNotRecognizedSound();
+            speak("Not recognized. Please look at the camera.", 1.0, 1.2);
+        }
+        
+        // Announce no face detected
+        function announceNoFace() {
+            const now = Date.now();
+            
+            if (lastAnnouncementTime['noface'] && 
+                (now - lastAnnouncementTime['noface']) < ANNOUNCEMENT_COOLDOWN * 3) {
+                return; // Longer cooldown to avoid spam
+            }
+            
+            lastAnnouncementTime['noface'] = now;
+            playSound(400, 0.2, 'sine');
+            speak("No face detected. Please position yourself in front of the camera.", 1.0, 1.2);
+        }
+        
+        // Announce too dark
+        function announceTooDark() {
+            const now = Date.now();
+            
+            if (lastAnnouncementTime['dark'] && 
+                (now - lastAnnouncementTime['dark']) < ANNOUNCEMENT_COOLDOWN * 4) {
+                return; // Even longer cooldown
+            }
+            
+            lastAnnouncementTime['dark'] = now;
+            playSound(300, 0.3, 'triangle');
+            speak("Warning, it is too dark. Please turn on the lights or move to a brighter location.", 0.95, 1.2);
+        }
+        
+        // Live guidance announcements
+        function announceGuidance(message) {
+            playSound(600, 0.1, 'sine');
+            speak(message, 1.0, 1.2);
+        }
+        
+        // Monitor video feed for face detection events
+        let lastFrameCheck = 0;
+        const FRAME_CHECK_INTERVAL = 2000; // Check every 2 seconds
+        
+        function monitorRecognition() {
+            const videoFeed = document.getElementById('videoFeed');
+            
+            if (!videoFeed || videoFeed.style.display === 'none') {
+                return; // Recognition not active
+            }
+            
+            const now = Date.now();
+            if (now - lastFrameCheck < FRAME_CHECK_INTERVAL) {
+                return;
+            }
+            lastFrameCheck = now;
+            
+            // Poll the recognition API for status
+            fetch('/api/recognition/status')
+                .then(response => response.json())
+                .then(data => {
+                    // Check for too dark condition first
+                    if (data.too_dark) {
+                        announceTooDark();
+                        return; // Priority announcement
+                    }
+                    
+                    // Check for faces
+                    if (data.faces_detected && data.faces_detected.length > 0) {
+                        data.faces_detected.forEach(face => {
+                            if (face.name !== 'Unknown') {
+                                announceRecognition(face.name, face.confidence);
+                            } else {
+                                announceUnknown();
+                            }
+                        });
+                    } else if (data.no_face) {
+                        // No face detected - give guidance
+                        announceNoFace();
+                    }
+                })
+                .catch(err => console.log('Recognition status check failed:', err));
+        }
+        
+        // Start monitoring when recognition starts
+        let recognitionMonitor = null;
+        
+        // Alert functions
+        function showSuccess(message) {
+            const alert = document.getElementById('successAlert');
+            alert.textContent = message;
+            alert.style.display = 'block';
+            
+            // Play success sound
+            playSound(800, 0.2, 'sine');
+            
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+
+        function showError(message) {
+            const alert = document.getElementById('errorAlert');
+            alert.textContent = message;
+            alert.style.display = 'block';
+            
+            // Play error sound
+            playSound(200, 0.3, 'sawtooth');
+            
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('addStudentModal');
+            if (event.target === modal) {
+                closeAddStudentModal();
+            }
+        }
+
+        // Load students on page load
+        window.onload = function() {
+            loadStudents();
+        }
+    </script>
+</body>
+</html>
