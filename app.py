@@ -405,7 +405,16 @@ def generate_frames():
     """Generate video frames with MULTI-STUDENT face recognition"""
     global camera, known_encodings, known_names, current_session_attendance
     
+    # Always reinitialize camera for a fresh session
+    if camera:
+        camera.release()
+        cv2.destroyAllWindows()
+    
     camera = cv2.VideoCapture(0)
+    
+    # Small delay to ensure camera is fully initialized
+    import time
+    time.sleep(0.1)
     
     # Load encodings
     load_encodings()
@@ -422,7 +431,23 @@ def generate_frames():
     ATTENDANCE_THRESHOLD = 10  # Need to see student for 10 frames to confirm
     
     try:
-        while recognition_active:
+        while True:  # Keep streaming, check recognition_active inside loop
+            if not recognition_active:
+                # Yield a blank frame when recognition is stopped
+                success, frame = camera.read()
+                if success:
+                    # Show "Recognition Stopped" message
+                    cv2.putText(frame, "Recognition Stopped - Click START to begin", 
+                               (50, frame.shape[0]//2),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    ret, buffer = cv2.imencode('.jpg', frame)
+                    frame = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+                time.sleep(0.1)  # Reduce CPU usage when stopped
+                continue
+            
+            # Recognition is active - process frames
             success, frame = camera.read()
             if not success:
                 break
@@ -654,8 +679,10 @@ def generate_frames():
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
     
     finally:
+        # Clean up camera and windows
         if camera:
             camera.release()
+        cv2.destroyAllWindows()
 
 @app.route('/video-feed')
 def video_feed():
@@ -672,11 +699,23 @@ def start_recognition():
 
 @app.route('/api/recognition/stop', methods=['POST'])
 def stop_recognition():
-    """Stop face recognition"""
-    global recognition_active, camera
+    """Stop face recognition and clear state"""
+    global recognition_active, current_recognition_status
+    
+    # Stop recognition
     recognition_active = False
-    if camera:
-        camera.release()
+    
+    # Explicitly destroy all OpenCV windows to clear frame buffers from RAM
+    cv2.destroyAllWindows()
+    
+    # Reset recognition status to clear any ghost data
+    current_recognition_status = {
+        'faces_detected': [],
+        'no_face': False,
+        'unknown_face': False,
+        'timestamp': None
+    }
+    
     return jsonify({'success': True, 'message': 'Recognition stopped'})
 
 @app.route('/api/recognition/status')
